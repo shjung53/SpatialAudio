@@ -23,9 +23,8 @@
 static const char *TAG = "NoisePlay";
 
 #include <android/log.h>
-
-#include <SimpleNoiseMaker.h>
-#include <jni.h>
+#include <SpatialAudioPlayer.h>
+#include <oboe/Oboe.h>
 
 // JNI functions are "C" calling convention
 #ifdef __cplusplus
@@ -35,7 +34,7 @@ extern "C" {
 using namespace oboe;
 
 // Use a static object so we don't have to worry about it getting deleted at the wrong time.
-static SimpleNoiseMaker sPlayer;
+static SpatialAudioPlayer sPlayer;
 
 /**
  * Native (JNI) implementation of AudioPlayer.startAudiostreamNative()
@@ -43,7 +42,7 @@ static SimpleNoiseMaker sPlayer;
 JNIEXPORT jint JNICALL Java_com_shjung53_audioplayer_AudioPlayer_startAudioStream(
         JNIEnv * /* env */, jobject) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "%s", __func__);
-    Result result = sPlayer.open();
+    Result result = sPlayer.open(ChannelMask::CM7Point1);
     if (result == Result::OK) {
         result = sPlayer.start();
     }

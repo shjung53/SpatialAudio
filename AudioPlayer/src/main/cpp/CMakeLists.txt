@@ -13,7 +13,7 @@ include_directories(
 
 set(APP_SOURCES
         AudioPlayer.cpp
-        SimpleNoiseMaker.cpp
+        SpatialAudioPlayer.cpp
 )
 
 add_library(${CMAKE_PROJECT_NAME} SHARED

@@ -3,6 +3,7 @@ package com.shjung53.myapplication
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
+import android.Manifest
 
 object RecordingModule {
     fun recordingPermissionCheck(context: Context): Result<Unit> =
@@ -14,6 +15,7 @@ object RecordingModule {
             // 권한이 이미 부여되었을 경우
             Result.success(Unit)
         } else {
+
             // 권한 요청이 필요한 경우
             ActivityCompat.requestPermissions(
                 context as MainActivity,

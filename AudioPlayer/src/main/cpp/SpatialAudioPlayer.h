@@ -10,7 +10,10 @@
 class SpatialAudioPlayer {
 
 public:
-    oboe::Result open(oboe::ChannelMask);
+    static std::vector<uint8_t> mPcmData;
+
+public:
+    oboe::Result open(oboe::ChannelMask, std::vector<uint8_t>);
 
     oboe::Result start();
 
@@ -19,6 +22,14 @@ public:
     oboe::Result close();
 
 private:
+    class MyPcmLoadCallback : public oboe::AudioStreamDataCallback {
+    public:
+        oboe::DataCallbackResult onAudioReady(
+                oboe::AudioStream *audioStream,
+                void *audioData,
+                int32_t numFrames) override;
+    };
+
     class MyDataCallback : public oboe::AudioStreamDataCallback {
     public:
         oboe::DataCallbackResult onAudioReady(
@@ -41,6 +52,7 @@ private:
     };
 
     std::shared_ptr<oboe::AudioStream> mStream;
+    std::shared_ptr<MyPcmLoadCallback> mPcmLoadCallback;
     std::shared_ptr<MyDataCallback> mDataCallback;
     std::shared_ptr<MyErrorCallback> mErrorCallback;
 

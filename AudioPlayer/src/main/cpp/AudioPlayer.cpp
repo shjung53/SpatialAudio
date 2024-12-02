@@ -19,12 +19,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-
-static const char *TAG = "NoisePlay";
-
 #include <android/log.h>
 #include <SpatialAudioPlayer.h>
 #include <oboe/Oboe.h>
+#include "vector"
 
 // JNI functions are "C" calling convention
 #ifdef __cplusplus
@@ -40,9 +38,21 @@ static SpatialAudioPlayer sPlayer;
  * Native (JNI) implementation of AudioPlayer.startAudiostreamNative()
  */
 JNIEXPORT jint JNICALL Java_com_shjung53_audioplayer_AudioPlayer_startAudioStream(
-        JNIEnv * /* env */, jobject) {
-    __android_log_print(ANDROID_LOG_INFO, TAG, "%s", __func__);
-    Result result = sPlayer.open(ChannelMask::CM7Point1);
+        JNIEnv *env, jobject, jbyteArray byteArray) {
+    // 1. jbyteArray를 네이티브 데이터로 변환
+    jsize length = env->GetArrayLength(byteArray); // byteArray의 길이 가져오기
+    jbyte *data = env->GetByteArrayElements(byteArray, nullptr); // 데이터 포인터 가져오기
+
+    // 2. jbyteArray를 std::vector로 변환 (더 안전한 관리)
+    std::vector<uint8_t> pcmData(length);
+    for (jsize i = 0; i < length; ++i) {
+        pcmData[i] = static_cast<uint8_t>(data[i]);
+    }
+
+    // 3. jbyteArray 메모리 해제
+    env->ReleaseByteArrayElements(byteArray, data, 0); // JNI 자원 반환
+
+    Result result = sPlayer.open(ChannelMask::CM7Point1, pcmData);
     if (result == Result::OK) {
         result = sPlayer.start();
     }
@@ -54,7 +64,6 @@ JNIEXPORT jint JNICALL Java_com_shjung53_audioplayer_AudioPlayer_startAudioStrea
  */
 JNIEXPORT jint JNICALL Java_com_shjung53_audioplayer_AudioPlayer_stopAudioStream(
         JNIEnv * /* env */, jobject) {
-    __android_log_print(ANDROID_LOG_INFO, TAG, "%s", __func__);
     // We need to close() even if the stop() fails because we need to delete the resources.
     Result result1 = sPlayer.stop();
     Result result2 = sPlayer.close();

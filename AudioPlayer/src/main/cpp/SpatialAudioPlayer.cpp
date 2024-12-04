@@ -4,6 +4,7 @@
 
 #include "SpatialAudioPlayer.h"
 #include <oboe/Oboe.h>
+#include <utility>
 #include <vector>
 #include <fstream>
 #include <cstring> // for memcpy
@@ -12,23 +13,19 @@
 using namespace oboe;
 
 // Global PCM data buffer (replace with a dynamic loader if needed)
-std::vector<float> pcmBuffer;
-std::vector<uint8_t> SpatialAudioPlayer::mPcmData;
+std::vector<float> SpatialAudioPlayer::mPcmBuffer;
 size_t readIndex = 0; // Track the current playback position
 
-void loadPcmFile(const std::vector<uint8_t> &pcmData) {
+void loadPcmFile(const std::vector<float> &pcmData) {
     if (pcmData.empty()) {
         throw std::runtime_error("PCM data is empty");
     }
-
-    // 8-bit unsigned PCM 데이터를 float (-1.0 ~ 1.0)로 변환
-    for (uint8_t sample: pcmData) {
-        float normalizedSample = (sample / 127.5f) - 1.0f; // Normalize to -1.0 ~ 1.0
-        pcmBuffer.push_back(normalizedSample);
+    for (float sample: pcmData) {
+        SpatialAudioPlayer::mPcmBuffer.push_back(sample);
     }
 }
 
-oboe::Result SpatialAudioPlayer::open(oboe::ChannelMask channelMask, std::vector<uint8_t> pcmData) {
+oboe::Result SpatialAudioPlayer::open(oboe::ChannelMask channelMask, std::vector<float> pcmData) {
     mDataCallback = std::make_shared<MyDataCallback>();
     mErrorCallback = std::make_shared<MyErrorCallback>(this);
     mPcmLoadCallback = std::make_shared<MyPcmLoadCallback>();
@@ -67,13 +64,19 @@ SpatialAudioPlayer::MyDataCallback::onAudioReady(
         void *audioData,
         int32_t numFrames) {
     float *output = static_cast<float *>(audioData);
-    int32_t numSamples = numFrames * audioStream->getChannelCount();
+    int32_t channelCount = audioStream->getChannelCount(); // 7채널
 
-    for (int i = 0; i < numSamples; i++) {
-        if (readIndex < pcmBuffer.size()) {
-            *output++ = pcmBuffer[readIndex++];
+    for (int i = 0; i < numFrames; ++i) {
+        if (readIndex < mPcmBuffer.size()) {
+            float sample = mPcmBuffer[readIndex++]; // Mono 데이터 샘플 읽기
+
+            for (int ch = 0; ch < channelCount; ++ch) {
+                *output++ = sample;
+            }
         } else {
-            *output++ = 0.0f; // Fill with silence if data ends
+            for (int ch = 0; ch < channelCount; ++ch) {
+                *output++ = 0.0f; // 데이터가 부족하면 모든 채널 Silence
+            }
         }
     }
 
@@ -83,7 +86,7 @@ SpatialAudioPlayer::MyDataCallback::onAudioReady(
 void SpatialAudioPlayer::MyErrorCallback::onErrorAfterClose(oboe::AudioStream *oboeStream,
                                                             oboe::Result error) {
     // Try to open and start a new stream after a disconnect.
-    if (mParent->open(oboeStream->getChannelMask(), mPcmData) == Result::OK) {
+    if (mParent->open(oboeStream->getChannelMask(), mPcmBuffer) == Result::OK) {
         mParent->start();
     }
 }
@@ -91,6 +94,6 @@ void SpatialAudioPlayer::MyErrorCallback::onErrorAfterClose(oboe::AudioStream *o
 oboe::DataCallbackResult
 SpatialAudioPlayer::MyPcmLoadCallback::onAudioReady(oboe::AudioStream *audioStream, void *audioData,
                                                     int32_t numFrames) {
-    loadPcmFile(mPcmData);
+    loadPcmFile(mPcmBuffer);
     return DataCallbackResult::Continue;
 }

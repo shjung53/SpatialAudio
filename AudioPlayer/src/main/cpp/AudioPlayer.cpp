@@ -22,7 +22,9 @@
 #include <android/log.h>
 #include <SpatialAudioPlayer.h>
 #include <oboe/Oboe.h>
-#include "vector"
+#include <vector>
+
+#include <android/log.h>
 
 // JNI functions are "C" calling convention
 #ifdef __cplusplus
@@ -42,17 +44,19 @@ JNIEXPORT jint JNICALL Java_com_shjung53_audioplayer_AudioPlayer_startAudioStrea
     // 1. jbyteArray를 네이티브 데이터로 변환
     jsize length = env->GetArrayLength(byteArray); // byteArray의 길이 가져오기
     jbyte *data = env->GetByteArrayElements(byteArray, nullptr); // 데이터 포인터 가져오기
+    __android_log_print(ANDROID_LOG_DEBUG, "바이트어레이", "ByteArraySize: %d", length);
 
-    // 2. jbyteArray를 std::vector로 변환 (더 안전한 관리)
-    std::vector<uint8_t> pcmData(length);
-    for (jsize i = 0; i < length; ++i) {
-        pcmData[i] = static_cast<uint8_t>(data[i]);
+    std::vector<float> floatBuffer(length / 2); // 16-bit이므로 요소 개수는 절반
+    const int16_t* pcmData = reinterpret_cast<const int16_t*>(data);
+
+    for (jsize i = 0; i < length / 2; ++i) {
+        floatBuffer[i] = static_cast<float>(pcmData[i]) / 32768.0f; // Normalize to -1.0 ~ 1.0
     }
 
     // 3. jbyteArray 메모리 해제
     env->ReleaseByteArrayElements(byteArray, data, 0); // JNI 자원 반환
 
-    Result result = sPlayer.open(ChannelMask::CM7Point1, pcmData);
+    Result result = sPlayer.open(ChannelMask::CM7Point1, floatBuffer);
     if (result == Result::OK) {
         result = sPlayer.start();
     }

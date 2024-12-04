@@ -10,10 +10,10 @@
 class SpatialAudioPlayer {
 
 public:
-    static std::vector<uint8_t> mPcmData;
+    static std::vector<float> mPcmBuffer;
 
 public:
-    oboe::Result open(oboe::ChannelMask, std::vector<uint8_t>);
+    oboe::Result open(oboe::ChannelMask, std::vector<float>);
 
     oboe::Result start();
 

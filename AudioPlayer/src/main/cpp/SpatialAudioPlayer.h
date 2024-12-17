@@ -9,11 +9,16 @@
 
 class SpatialAudioPlayer {
 
-public:
-    static std::vector<float> mPcmBuffer;
+private:
+    static std::unique_ptr<oboe::FifoBuffer> buffer;
+    int16_t *pcmData;
+    size_t offset = 0;
+    size_t pcmSize = 0;
 
 public:
-    oboe::Result open(oboe::ChannelMask, std::vector<float>);
+    void loadPcmFile(int16_t *pcmData, size_t pcmSize);
+
+    oboe::Result open(oboe::ChannelMask, int16_t *pcmData, size_t pcmSize);
 
     oboe::Result start();
 
@@ -22,20 +27,17 @@ public:
     oboe::Result close();
 
 private:
-    class MyPcmLoadCallback : public oboe::AudioStreamDataCallback {
-    public:
-        oboe::DataCallbackResult onAudioReady(
-                oboe::AudioStream *audioStream,
-                void *audioData,
-                int32_t numFrames) override;
-    };
-
     class MyDataCallback : public oboe::AudioStreamDataCallback {
+public: MyDataCallback(SpatialAudioPlayer *parent): mParent(parent) {}
+
     public:
         oboe::DataCallbackResult onAudioReady(
                 oboe::AudioStream *audioStream,
                 void *audioData,
                 int32_t numFrames) override;
+
+    private:
+        SpatialAudioPlayer *mParent;
     };
 
     class MyErrorCallback : public oboe::AudioStreamErrorCallback {
@@ -52,11 +54,8 @@ private:
     };
 
     std::shared_ptr<oboe::AudioStream> mStream;
-    std::shared_ptr<MyPcmLoadCallback> mPcmLoadCallback;
     std::shared_ptr<MyDataCallback> mDataCallback;
     std::shared_ptr<MyErrorCallback> mErrorCallback;
-
-    static constexpr int kChannelCount = 7;
 };
 
 

@@ -3,6 +3,7 @@
 //
 
 #include "SpatialAudioPlayer.h"
+#include "../../../../oboe-main/src/common/OboeDebug.h"
 #include <oboe/Oboe.h>
 #include <utility>
 #include <vector>
@@ -12,32 +13,40 @@
 
 using namespace oboe;
 
-// Global PCM data buffer (replace with a dynamic loader if needed)
-std::vector<float> SpatialAudioPlayer::mPcmBuffer;
-size_t readIndex = 0; // Track the current playback position
+std::unique_ptr<oboe::FifoBuffer> SpatialAudioPlayer::buffer = nullptr;
+constexpr size_t framesToWrite = 512;  // 한 번에 버퍼에 쓸 프레임 수
 
-void loadPcmFile(const std::vector<float> &pcmData) {
-    if (pcmData.empty()) {
-        throw std::runtime_error("PCM data is empty");
-    }
-    for (float sample: pcmData) {
-        SpatialAudioPlayer::mPcmBuffer.push_back(sample);
+void SpatialAudioPlayer::loadPcmFile(int16_t *pcmData, size_t pcmSize) {
+    if (offset < pcmSize) {
+        size_t remainingFrames = pcmSize - offset;
+        size_t framesToCopy = std::min(framesToWrite, remainingFrames);
+
+        SpatialAudioPlayer::buffer->write(pcmData + offset, framesToCopy);
+
+        offset += framesToCopy;
     }
 }
 
-oboe::Result SpatialAudioPlayer::open(oboe::ChannelMask channelMask, std::vector<float> pcmData) {
-    mDataCallback = std::make_shared<MyDataCallback>();
+oboe::Result
+SpatialAudioPlayer::open(oboe::ChannelMask channelMask, int16_t *pcmData, size_t pcmSize) {
+    mDataCallback = std::make_shared<MyDataCallback>(this);
     mErrorCallback = std::make_shared<MyErrorCallback>(this);
-    mPcmLoadCallback = std::make_shared<MyPcmLoadCallback>();
-    loadPcmFile(pcmData);
+
+    SpatialAudioPlayer::pcmData = pcmData;
+    SpatialAudioPlayer::pcmSize = pcmSize;
+    SpatialAudioPlayer::offset = 0;
+
+    uint32_t bytesPerFrame = 2 * 1;
+    uint32_t capacityInFrames = 1024;
+    SpatialAudioPlayer::buffer = std::make_unique<oboe::FifoBuffer>(bytesPerFrame,
+                                                                    capacityInFrames);
 
     AudioStreamBuilder builder;
     oboe::Result result = builder.setSharingMode(oboe::SharingMode::Exclusive)
             ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setFormat(oboe::AudioFormat::Float)
-            ->setChannelCount(kChannelCount)
+            ->setFormat(oboe::AudioFormat::I16)
+            ->setChannelCount(1)
             ->setChannelMask(channelMask)
-            ->setDataCallback(mPcmLoadCallback)
             ->setDataCallback(mDataCallback)
             ->setErrorCallback(mErrorCallback)
                     // Open using a shared_ptr.
@@ -63,37 +72,16 @@ SpatialAudioPlayer::MyDataCallback::onAudioReady(
         oboe::AudioStream *audioStream,
         void *audioData,
         int32_t numFrames) {
-    float *output = static_cast<float *>(audioData);
-    int32_t channelCount = audioStream->getChannelCount(); // 7채널
-
-    for (int i = 0; i < numFrames; ++i) {
-        if (readIndex < mPcmBuffer.size()) {
-            float sample = mPcmBuffer[readIndex++]; // Mono 데이터 샘플 읽기
-
-            for (int ch = 0; ch < channelCount; ++ch) {
-                *output++ = sample;
-            }
-        } else {
-            for (int ch = 0; ch < channelCount; ++ch) {
-                *output++ = 0.0f; // 데이터가 부족하면 모든 채널 Silence
-            }
-        }
-    }
-
+    mParent->loadPcmFile(mParent->pcmData, mParent->pcmSize);
+    if (mParent->offset >= mParent->pcmSize) return oboe::DataCallbackResult::Stop;
+    buffer->read(audioData, framesToWrite);
     return oboe::DataCallbackResult::Continue;
 }
 
 void SpatialAudioPlayer::MyErrorCallback::onErrorAfterClose(oboe::AudioStream *oboeStream,
                                                             oboe::Result error) {
-    // Try to open and start a new stream after a disconnect.
-    if (mParent->open(oboeStream->getChannelMask(), mPcmBuffer) == Result::OK) {
+    if (mParent->open(oboeStream->getChannelMask(), mParent->pcmData, mParent->pcmSize) ==
+        Result::OK) {
         mParent->start();
     }
-}
-
-oboe::DataCallbackResult
-SpatialAudioPlayer::MyPcmLoadCallback::onAudioReady(oboe::AudioStream *audioStream, void *audioData,
-                                                    int32_t numFrames) {
-    loadPcmFile(mPcmBuffer);
-    return DataCallbackResult::Continue;
 }
